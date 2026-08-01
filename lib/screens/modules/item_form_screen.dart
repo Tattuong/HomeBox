@@ -66,7 +66,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     _serialCtrl = TextEditingController(text: e?.serialNumber ?? '');
     _contractorCtrl = TextEditingController(text: e?.contractor ?? '');
     _repairCostCtrl = TextEditingController(text: e?.repairCost?.toStringAsFixed(0) ?? '');
-    _valueCtrl = TextEditingController(text: e?.value?.toStringAsFixed(0) ?? '24');
+    _valueCtrl = TextEditingController(text: e?.value?.toStringAsFixed(0) ?? '');
     _roomId = _normalizeRoomId(e?.roomId ?? context.read<HomeProvider>().selectedRoom.name);
     _dueDate = e?.dueDate;
     _purchaseDate = e?.purchaseDate;
@@ -133,9 +133,9 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       roomId: _roomId,
       location: _locationCtrl.text.trim().isEmpty ? null : _locationCtrl.text.trim(),
       quantity: int.tryParse(_quantityCtrl.text),
-      isOn: _isOn,
-      value: double.tryParse(_valueCtrl.text),
-      unit: 'heat',
+      isOn: widget.category == HomeItemCategory.electrical ? null : _isOn,
+      value: widget.category == HomeItemCategory.electrical ? null : double.tryParse(_valueCtrl.text),
+      unit: widget.category == HomeItemCategory.electrical ? null : 'heat',
       amount: double.tryParse(_amountCtrl.text),
       dueDate: _dueDate,
       isPaid: _isPaid,
@@ -157,8 +157,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         roomId: _roomId,
         location: item.location,
         quantity: item.quantity,
-        isOn: _isOn,
-        value: item.value,
+        isOn: widget.category == HomeItemCategory.electrical ? null : _isOn,
+        value: widget.category == HomeItemCategory.electrical ? null : item.value,
         amount: item.amount,
         dueDate: _dueDate,
         isPaid: _isPaid,
@@ -174,7 +174,6 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       ));
     } else {
       await home.addItem(item);
-      await shop.rewardForTaskComplete();
     }
 
     if (mounted) Navigator.pop(context);
@@ -257,12 +256,14 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       ],
       HomeItemCategory.electrical => [
         const SizedBox(height: 12),
-        TextField(controller: _valueCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Temperature °')),
-        SwitchListTile(
-          title: Text(AppStrings.t(context, 'power')),
-          value: _isOn,
-          activeColor: AppColors.toggleOn,
-          onChanged: (v) => setState(() => _isOn = v),
+        TextField(
+          controller: _locationCtrl,
+          decoration: InputDecoration(labelText: AppStrings.t(context, 'location')),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _serialCtrl,
+          decoration: InputDecoration(labelText: AppStrings.t(context, 'serialNumber')),
         ),
       ],
       HomeItemCategory.bill => [

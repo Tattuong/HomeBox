@@ -48,8 +48,8 @@ class StatsScreen extends StatelessWidget {
                 ),
                 _StatCard(
                   label: AppStrings.t(context, 'activeDevices'),
-                  value: '${home.activeDevices}',
-                  icon: Icons.power_settings_new_rounded,
+                  value: '${home.items.length}',
+                  icon: Icons.inventory_2_outlined,
                   color: AppColors.success,
                 ),
                 _StatCard(
@@ -71,8 +71,8 @@ class StatsScreen extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
               child: Text(
-                AppStrings.t(context, 'weeklyOverview'),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                AppStrings.t(context, 'categoryOverview'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
               ),
             ),
           ),
@@ -169,6 +169,16 @@ class _CategoryChart extends StatelessWidget {
 
   const _CategoryChart({required this.home});
 
+  String _label(BuildContext context, HomeItemCategory c) => switch (c) {
+        HomeItemCategory.storage => AppStrings.t(context, 'modStorage'),
+        HomeItemCategory.furniture => AppStrings.t(context, 'modFurniture'),
+        HomeItemCategory.electrical => AppStrings.t(context, 'modElectrical'),
+        HomeItemCategory.bill => AppStrings.t(context, 'modBills'),
+        HomeItemCategory.warranty => AppStrings.t(context, 'modWarranty'),
+        HomeItemCategory.pdfGuide => AppStrings.t(context, 'modPdf'),
+        HomeItemCategory.repair => AppStrings.t(context, 'modRepair'),
+      };
+
   @override
   Widget build(BuildContext context) {
     final categories = HomeItemCategory.values;
@@ -188,12 +198,18 @@ class _CategoryChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 28,
               getTitlesWidget: (value, meta) {
                 final i = value.toInt();
                 if (i < 0 || i >= categories.length) return const SizedBox.shrink();
+                final label = _label(context, categories[i]);
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text('${i + 1}', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    label.length > 6 ? '${label.substring(0, 5)}…' : label,
+                    style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
                 );
               },
             ),

@@ -26,7 +26,7 @@ class _SearchScreenState extends State<SearchScreen> {
   String _categoryLabel(BuildContext context, HomeItemCategory category) => switch (category) {
         HomeItemCategory.storage => AppStrings.t(context, 'modStorage'),
         HomeItemCategory.furniture => AppStrings.t(context, 'modFurniture'),
-        HomeItemCategory.electrical => AppStrings.t(context, 'smartDevices'),
+        HomeItemCategory.electrical => AppStrings.t(context, 'modElectrical'),
         HomeItemCategory.bill => AppStrings.t(context, 'modBills'),
         HomeItemCategory.warranty => AppStrings.t(context, 'modWarranty'),
         HomeItemCategory.pdfGuide => AppStrings.t(context, 'modPdf'),

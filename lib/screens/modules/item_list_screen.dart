@@ -12,6 +12,7 @@ import '../../providers/home_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../widgets/app_toast.dart';
 import '../../widgets/app_ui.dart';
+import '../electrical/device_detail_screen.dart';
 import 'item_form_screen.dart';
 
 class ItemListScreen extends StatelessWidget {
@@ -111,6 +112,13 @@ class ItemListScreen extends StatelessWidget {
       }
       return;
     }
+    if (category == HomeItemCategory.electrical) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DeviceDetailScreen(item: item)),
+      );
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ItemFormScreen(category: category, existing: item)),
@@ -177,7 +185,7 @@ class _ItemTile extends StatelessWidget {
     return switch (item.category) {
       HomeItemCategory.storage => '${item.location ?? ''} · x${item.quantity ?? 1}',
       HomeItemCategory.furniture => item.location ?? item.description ?? '',
-      HomeItemCategory.electrical => item.isOn == true ? AppStrings.t(context, 'on') : AppStrings.t(context, 'off'),
+      HomeItemCategory.electrical => item.location ?? item.serialNumber ?? item.description ?? '',
       HomeItemCategory.bill =>
         '${item.amount?.toStringAsFixed(0) ?? 0} · ${item.isPaid == true ? AppStrings.t(context, 'paid') : AppStrings.t(context, 'unpaid')}${item.dueDate != null ? ' · ${df.format(item.dueDate!)}' : ''}',
       HomeItemCategory.warranty =>

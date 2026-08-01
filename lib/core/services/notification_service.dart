@@ -50,7 +50,7 @@ class NotificationService {
         android: AndroidNotificationDetails(
           'life_reminders',
           'HomeBox Reminders',
-          channelDescription: 'Reminders for calendar events and tasks',
+          channelDescription: 'Bill and warranty reminders for HomeBox',
           importance: Importance.high,
           priority: Priority.high,
         ),

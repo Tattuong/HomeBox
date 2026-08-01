@@ -1,178 +1,183 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_strings.dart';
 import '../../models/home_item.dart';
+import '../../models/home_room.dart';
 import '../../providers/home_provider.dart';
-import '../../widgets/room_selector.dart';
+import '../../widgets/app_ui.dart';
+import '../modules/item_form_screen.dart';
 
-class DeviceDetailScreen extends StatefulWidget {
+/// Inventory detail for an electrical appliance — not a live IoT controller.
+class DeviceDetailScreen extends StatelessWidget {
   final HomeItem item;
 
   const DeviceDetailScreen({super.key, required this.item});
 
-  @override
-  State<DeviceDetailScreen> createState() => _DeviceDetailScreenState();
-}
-
-class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
-  late double _temperature;
-  late bool _isOn;
-  int _mode = 2;
-
-  @override
-  void initState() {
-    super.initState();
-    _temperature = widget.item.value ?? 24;
-    _isOn = widget.item.isOn ?? false;
+  String _roomLabel(BuildContext context) {
+    final room = HomeRoom.all.firstWhere(
+      (r) => r.id.name == item.roomId,
+      orElse: () => HomeRoom.all.first,
+    );
+    return AppStrings.t(context, room.nameKey);
   }
 
-  Future<void> _save() async {
-    await context.read<HomeProvider>().updateItem(
-          widget.item.copyWith(isOn: _isOn, value: _temperature),
-        );
+  Future<void> _edit(BuildContext context) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ItemFormScreen(category: HomeItemCategory.electrical, existing: item),
+      ),
+    );
+    if (context.mounted) Navigator.pop(context);
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(AppStrings.t(context, 'deleteConfirm', {'title': item.title})),
+        content: Text(AppStrings.t(context, 'deleteConfirmBody')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(AppStrings.t(context, 'cancel'))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: Text(AppStrings.t(context, 'delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await context.read<HomeProvider>().deleteItem(item.id);
+    if (context.mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final home = context.watch<HomeProvider>();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.item.title),
-        actions: [IconButton(icon: const Icon(Icons.more_vert_rounded), onPressed: () {})],
-      ),
-      body: ListView(
-        children: [
-          RoomSelector(
-            selected: home.selectedRoom,
-            onChanged: home.selectRoom,
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
+    return AppLightShellTheme(
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.background,
+          foregroundColor: AppColors.textPrimary,
+          title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          actions: [
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
+              onSelected: (v) {
+                switch (v) {
+                  case 'edit':
+                    _edit(context);
+                  case 'delete':
+                    _confirmDelete(context);
+                }
+              },
+              itemBuilder: (ctx) => [
+                PopupMenuItem(value: 'edit', child: Text(AppStrings.t(context, 'edit'))),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(AppStrings.t(context, 'delete'), style: const TextStyle(color: AppColors.error)),
+                ),
+              ],
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            if (item.photoPaths.isNotEmpty)
+              ClipRRect(
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 4)),
-                ],
+                child: AspectRatio(
+                  aspectRatio: 16 / 10,
+                  child: Image.file(File(item.photoPaths.first), fit: BoxFit.cover),
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            if (item.photoPaths.isNotEmpty) const SizedBox(height: 20),
+            _InfoCard(
+              children: [
+                _InfoRow(icon: Icons.meeting_room_outlined, label: AppStrings.t(context, 'room'), value: _roomLabel(context)),
+                if (item.location != null && item.location!.isNotEmpty)
+                  _InfoRow(icon: Icons.place_outlined, label: AppStrings.t(context, 'location'), value: item.location!),
+                if (item.serialNumber != null && item.serialNumber!.isNotEmpty)
+                  _InfoRow(icon: Icons.tag_outlined, label: AppStrings.t(context, 'serialNumber'), value: item.serialNumber!),
+              ],
+            ),
+            if (item.description != null && item.description!.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _InfoCard(
                 children: [
-                  Text(AppStrings.t(context, 'power'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                  Switch(
-                    value: _isOn,
-                    activeColor: AppColors.toggleOn,
-                    onChanged: (v) {
-                      setState(() => _isOn = v);
-                      context.read<HomeProvider>().toggleDevice(widget.item.id);
-                    },
-                  ),
+                  Text(AppStrings.t(context, 'description'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Text(item.description!, style: const TextStyle(color: AppColors.textSecondary, height: 1.45)),
                 ],
               ),
+            ],
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => _edit(context),
+              icon: const Icon(Icons.edit_outlined),
+              label: Text(AppStrings.t(context, 'edit')),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryCoral,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 280,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 240,
-                  height: 240,
-                  child: CircularProgressIndicator(
-                    value: (_temperature - 10) / 30,
-                    strokeWidth: 8,
-                    backgroundColor: AppColors.surfaceVariant,
-                    valueColor: const AlwaysStoppedAnimation(AppColors.toggleOn),
-                  ),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${_temperature.round()}°',
-                      style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w300),
-                    ),
-                    Text(
-                      AppStrings.t(context, 'outsideTemp', {'temp': '14'}),
-                      style: const TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Slider(
-            value: _temperature,
-            min: 10,
-            max: 40,
-            divisions: 30,
-            activeColor: AppColors.toggleOn,
-            label: '${_temperature.round()}°',
-            onChanged: (v) => setState(() => _temperature = v),
-            onChangeEnd: (_) => _save(),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _ModeButton(icon: Icons.ac_unit_outlined, label: AppStrings.t(context, 'modeAuto'), selected: _mode == 0, onTap: () => setState(() => _mode = 0)),
-                _ModeButton(icon: Icons.ac_unit, label: AppStrings.t(context, 'modeCool'), selected: _mode == 1, onTap: () => setState(() => _mode = 1)),
-                _ModeButton(icon: Icons.wb_sunny_outlined, label: AppStrings.t(context, 'modeHeat'), selected: _mode == 2, onTap: () => setState(() => _mode = 2)),
-                _ModeButton(icon: Icons.water_drop_outlined, label: AppStrings.t(context, 'modeDry'), selected: _mode == 3, onTap: () => setState(() => _mode = 3)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 40),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ModeButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+class _InfoCard extends StatelessWidget {
+  final List<Widget> children;
 
-  const _ModeButton({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+  const _InfoCard({required this.children});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.surfaceVariant),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: selected ? AppColors.primaryCoral.withValues(alpha: 0.15) : AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(icon, color: selected ? AppColors.primaryCoral : AppColors.textSecondary),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? AppColors.primaryCoral : AppColors.textSecondary,
+          Icon(icon, size: 20, color: AppColors.primaryCoral),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ],
             ),
           ),
         ],

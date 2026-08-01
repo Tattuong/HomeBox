@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/services/photo_service.dart';
 import '../core/services/storage_service.dart';
 import '../models/home_item.dart';
 import '../models/home_room.dart';
@@ -45,6 +46,38 @@ class HomeProvider extends ChangeNotifier {
 
   int countForCategory(HomeItemCategory category) =>
       _items.where((i) => i.category == category).length;
+
+  int countForCategoryInRoom(HomeItemCategory category, HomeRoomId room) =>
+      itemsForCategory(category, room: room).length;
+
+  List<HomeItem> upcomingBillsFor(HomeRoomId room) {
+    final now = DateTime.now();
+    return itemsForRoom(room)
+        .where((i) =>
+            i.category == HomeItemCategory.bill &&
+            i.isPaid != true &&
+            i.dueDate != null &&
+            i.dueDate!.isAfter(now.subtract(const Duration(days: 1))))
+        .toList()
+      ..sort((a, b) => a.dueDate!.compareTo(b.dueDate!));
+  }
+
+  List<HomeItem> expiringWarrantiesFor(HomeRoomId room) {
+    final now = DateTime.now();
+    final threshold = now.add(const Duration(days: 30));
+    return itemsForRoom(room)
+        .where((i) =>
+            i.category == HomeItemCategory.warranty &&
+            i.expiryDate != null &&
+            i.expiryDate!.isBefore(threshold) &&
+            i.expiryDate!.isAfter(now.subtract(const Duration(days: 1))))
+        .toList()
+      ..sort((a, b) => a.expiryDate!.compareTo(b.expiryDate!));
+  }
+
+  double repairCostsFor(HomeRoomId room) => itemsForRoom(room)
+      .where((i) => i.category == HomeItemCategory.repair)
+      .fold(0.0, (sum, i) => sum + (i.repairCost ?? 0));
 
   List<HomeItem> search(String query) {
     if (query.trim().isEmpty) return _items;
@@ -130,6 +163,10 @@ class HomeProvider extends ChangeNotifier {
   }
 
   Future<void> deleteItem(String id) async {
+    final index = _items.indexWhere((e) => e.id == id);
+    if (index >= 0 && _items[index].photoPaths.isNotEmpty) {
+      await PhotoService.instance.deletePhotos(_items[index].photoPaths);
+    }
     _items.removeWhere((e) => e.id == id);
     await _saveItems();
     notifyListeners();
