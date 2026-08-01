@@ -11,12 +11,14 @@ import '../models/home_room.dart';
 class HomeProvider extends ChangeNotifier {
   static const _itemsKey = 'hb_items';
   static const _profileKey = 'hb_profile';
+  static const _roomImagesKey = 'hb_room_images';
   static const _onboardingKey = 'hb_onboarding_done';
 
   final _uuid = const Uuid();
 
   List<HomeItem> _items = [];
   String _userName = '';
+  final Map<String, String> _roomImages = {};
   HomeRoomId _selectedRoom = HomeRoomId.all;
   bool _onboardingDone = false;
   bool _initialized = false;
@@ -137,6 +139,30 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? roomImagePath(HomeRoomId roomId) {
+    if (roomId == HomeRoomId.all) return null;
+    return _roomImages[roomId.name];
+  }
+
+  Future<void> setRoomImage(HomeRoomId roomId, String path) async {
+    if (roomId == HomeRoomId.all) return;
+    final old = _roomImages[roomId.name];
+    if (old != null && old != path) {
+      await PhotoService.instance.deletePhoto(old);
+    }
+    _roomImages[roomId.name] = path;
+    await _saveRoomImages();
+    notifyListeners();
+  }
+
+  Future<void> resetRoomImage(HomeRoomId roomId) async {
+    if (roomId == HomeRoomId.all) return;
+    final old = _roomImages.remove(roomId.name);
+    if (old != null) await PhotoService.instance.deletePhoto(old);
+    await _saveRoomImages();
+    notifyListeners();
+  }
+
   Future<void> setUserName(String name) async {
     _userName = name.trim();
     await _saveProfile();
@@ -253,6 +279,13 @@ class HomeProvider extends ChangeNotifier {
     }
 
     _onboardingDone = await StorageService.instance.getBool(_onboardingKey) ?? false;
+
+    final roomImages = await StorageService.instance.getData(_roomImagesKey);
+    if (roomImages != null) {
+      _roomImages
+        ..clear()
+        ..addAll(roomImages.map((k, v) => MapEntry(k.toString(), v.toString())));
+    }
   }
 
   Future<void> _saveItems() async {
@@ -264,8 +297,13 @@ class HomeProvider extends ChangeNotifier {
     await StorageService.instance.saveData(_profileKey, {'userName': _userName});
   }
 
+  Future<void> _saveRoomImages() async {
+    await StorageService.instance.saveData(_roomImagesKey, _roomImages);
+  }
+
   Map<String, dynamic> exportAllData() => {
         'userName': _userName,
+        'roomImages': Map<String, String>.from(_roomImages),
         'items': _items.map((i) => i.toJson()).toList(),
         'exportedAt': DateTime.now().toIso8601String(),
       };
