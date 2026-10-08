@@ -51,5 +51,9 @@
 	<string>HomeBox needs photo library access to attach images to your home items.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>HomeBox saves photos you attach to home items.</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>This allows the app to show ads that are more relevant to you.</string>
 </dict>
 </plist>

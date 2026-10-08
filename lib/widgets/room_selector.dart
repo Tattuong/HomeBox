@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
@@ -109,14 +109,14 @@ class RoomImageHeader extends StatelessWidget {
     final home = context.read<HomeProvider>();
     final room = HomeRoom.byId(roomId);
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-      withData: true,
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1920,
     );
-    if (result == null || result.files.isEmpty) return;
+    if (file == null) return;
 
-    final saved = await PhotoService.instance.persistPlatformFile(result.files.first);
+    final saved = await PhotoService.instance.persistXFile(file);
     if (saved == null) {
       if (context.mounted) {
         AppToast.show(

@@ -21,7 +21,7 @@ enum ShopPurchaseResult {
   error,
 }
 
-class ShopProvider extends ChangeNotifier {
+class ShopProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _coinsKey = 'hb_coins';
   static const _ownedKey = 'hb_owned_items';
   static const _activeThemeKey = 'hb_active_theme';
@@ -44,6 +44,12 @@ class ShopProvider extends ChangeNotifier {
   final BillingService _billing = BillingService();
   final _random = Random();
 
+  ShopProvider() {
+    _lifecycle =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+  }
+
   int _coins = 0;
   int _loginStreak = 0;
   bool _firstPurchaseBonusAvailable = true;
@@ -52,6 +58,10 @@ class ShopProvider extends ChangeNotifier {
   String _activeBackgroundId = ShopCatalog.defaultBackgroundId;
   String _activeSkinId = ShopCatalog.defaultSkinId;
   bool _isPurchasing = false;
+  bool _attemptActive = false;
+  int _purchaseEpoch = 0;
+  Timer? _purchaseTimer;
+  AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   bool _isLoading = true;
   String? _lastMessage;
   Set<String> _processedPurchaseIds = {};
@@ -85,7 +95,8 @@ class ShopProvider extends ChangeNotifier {
     return (_coins / next.price).clamp(0.0, 1.0);
   }
 
-  bool get hasAffordableUnlock => nextUnlockItem != null && _coins >= nextUnlockItem!.price;
+  bool get hasAffordableUnlock =>
+      nextUnlockItem != null && _coins >= nextUnlockItem!.price;
   Set<String> get ownedItems => _ownedItems;
   String get activeThemeId => _activeThemeId;
   String get activeBackgroundId => _activeBackgroundId;
@@ -99,7 +110,9 @@ class ShopProvider extends ChangeNotifier {
 
   bool get isBillingDisabled => _configService.isBillingDisabled;
   bool get isBillingAvailable =>
-      !isBillingDisabled && _billing.isAvailable && _billing.products.isNotEmpty;
+      !isBillingDisabled &&
+      _billing.isAvailable &&
+      _billing.products.isNotEmpty;
   IapConfigStatus get configStatus => _configService.status;
 
   bool get hasRemoveAds => _ownedItems.contains('remove_ads');
@@ -110,11 +123,13 @@ class ShopProvider extends ChangeNotifier {
   bool get hasPdfPro => _ownedItems.contains('feat_pdf_pro');
   bool get hasPhotoAlbum => _ownedItems.contains('feat_photo_album');
 
-  int get photoLimitPerItem =>
-      hasPhotoAlbum ? IapConstants.premiumPhotosPerItem : IapConstants.freePhotosPerItem;
+  int get photoLimitPerItem => hasPhotoAlbum
+      ? IapConstants.premiumPhotosPerItem
+      : IapConstants.freePhotosPerItem;
 
-  int get photoLimitTotal =>
-      hasPhotoAlbum ? IapConstants.premiumPhotosTotal : IapConstants.freePhotosTotal;
+  int get photoLimitTotal => hasPhotoAlbum
+      ? IapConstants.premiumPhotosTotal
+      : IapConstants.freePhotosTotal;
 
   int remainingPhotoQuota(int currentTotal) =>
       (photoLimitTotal - currentTotal).clamp(0, photoLimitTotal);
@@ -148,7 +163,8 @@ class ShopProvider extends ChangeNotifier {
     if (!isBillingDisabled && (Platform.isAndroid || Platform.isIOS)) {
       await _billing.init(
         onPurchase: _handlePurchase,
-        onError: () => notifyListeners(),
+        onError: _onBillingError,
+        onCanceled: _onBillingCanceled,
       );
     }
 
@@ -165,25 +181,31 @@ class ShopProvider extends ChangeNotifier {
     _coins = await StorageService.instance.getInt(_coinsKey) ?? 0;
     final owned = await StorageService.instance.getStringList(_ownedKey);
     _ownedItems = owned?.toSet() ?? {};
-    _activeThemeId =
-        await StorageService.instance.getString(_activeThemeKey) ?? ShopCatalog.defaultThemeId;
+    _activeThemeId = await StorageService.instance.getString(_activeThemeKey) ??
+        ShopCatalog.defaultThemeId;
     _activeBackgroundId =
-        await StorageService.instance.getString(_activeBgKey) ?? ShopCatalog.defaultBackgroundId;
-    _activeSkinId =
-        await StorageService.instance.getString(_activeSkinKey) ?? ShopCatalog.defaultSkinId;
-    final processed = await StorageService.instance.getStringList(_processedPurchasesKey);
+        await StorageService.instance.getString(_activeBgKey) ??
+            ShopCatalog.defaultBackgroundId;
+    _activeSkinId = await StorageService.instance.getString(_activeSkinKey) ??
+        ShopCatalog.defaultSkinId;
+    final processed =
+        await StorageService.instance.getStringList(_processedPurchasesKey);
     _processedPurchaseIds = processed?.toSet() ?? {};
     _loginStreak = await StorageService.instance.getInt(_loginStreakKey) ?? 0;
-    _firstPurchaseBonusAvailable = !(await StorageService.instance.getBool(_firstPurchaseBonusKey) ?? false);
+    _firstPurchaseBonusAvailable =
+        !(await StorageService.instance.getBool(_firstPurchaseBonusKey) ??
+            false);
   }
 
   Future<void> _saveLocal() async {
     await StorageService.instance.saveInt(_coinsKey, _coins);
-    await StorageService.instance.saveStringList(_ownedKey, _ownedItems.toList());
+    await StorageService.instance
+        .saveStringList(_ownedKey, _ownedItems.toList());
     await StorageService.instance.saveString(_activeThemeKey, _activeThemeId);
     await StorageService.instance.saveString(_activeBgKey, _activeBackgroundId);
     await StorageService.instance.saveString(_activeSkinKey, _activeSkinId);
-    await StorageService.instance.saveStringList(_processedPurchasesKey, _processedPurchaseIds.toList());
+    await StorageService.instance
+        .saveStringList(_processedPurchasesKey, _processedPurchaseIds.toList());
   }
 
   bool ownsItem(String id) => _ownedItems.contains(id);
@@ -191,7 +213,8 @@ class ShopProvider extends ChangeNotifier {
   int itemLimit(bool hasPremium) =>
       hasPremium ? IapConstants.premiumItemLimit : IapConstants.freeItemLimit;
 
-  bool canAddItem(int currentCount) => currentCount < itemLimit(hasUnlimitedItems);
+  bool canAddItem(int currentCount) =>
+      currentCount < itemLimit(hasUnlimitedItems);
 
   ShopPurchaseResult buyWithCoins(String itemId) {
     final item = ShopCatalog.find(itemId);
@@ -226,37 +249,108 @@ class ShopProvider extends ChangeNotifier {
 
   Future<bool> buyCoinPack(ProductDetails product) async {
     if (isBillingDisabled || !_billing.isAvailable) return false;
-    _isPurchasing = true;
-    _lastMessage = null;
-    notifyListeners();
-    final ok = await _billing.buyCoinPack(product);
-    if (!ok) {
-      _isPurchasing = false;
-      _lastMessage = 'purchaseFailed';
-      notifyListeners();
+    _beginPurchase();
+    try {
+      final ok = await _billing.buyCoinPack(product);
+      if (!ok) _onBillingError();
+      return ok;
+    } catch (_) {
+      _onBillingError();
+      return false;
     }
-    return ok;
   }
 
   Future<bool> buyRemoveAdsViaBilling() async {
-    if (isBillingDisabled || !_billing.isAvailable || _billing.removeAdsProduct == null) {
+    if (isBillingDisabled ||
+        !_billing.isAvailable ||
+        _billing.removeAdsProduct == null) {
       return false;
     }
     if (hasRemoveAds) return false;
+    _beginPurchase();
+    try {
+      final ok = await _billing.buyRemoveAds();
+      if (!ok) _onBillingError();
+      return ok;
+    } catch (_) {
+      _onBillingError();
+      return false;
+    }
+  }
+
+  void _beginPurchase() {
+    _purchaseEpoch++;
+    _attemptActive = true;
     _isPurchasing = true;
     _lastMessage = null;
+    _armPurchaseTimer(const Duration(seconds: 12));
     notifyListeners();
-    final ok = await _billing.buyRemoveAds();
-    if (!ok) {
+  }
+
+  void _armPurchaseTimer(Duration duration) {
+    _purchaseTimer?.cancel();
+    final epoch = _purchaseEpoch;
+    _purchaseTimer = Timer(duration, () {
+      if (epoch != _purchaseEpoch || !_isPurchasing) return;
+      if (_lifecycle != AppLifecycleState.resumed) {
+        _armPurchaseTimer(const Duration(seconds: 5));
+        return;
+      }
       _isPurchasing = false;
-      _lastMessage = 'purchaseFailed';
       notifyListeners();
+    });
+  }
+
+  /// Clears a spinner left from the last attempt. No-op unless the app is resumed.
+  void releasePurchaseUi() {
+    if (_lifecycle != AppLifecycleState.resumed) return;
+    if (!_isPurchasing && !_attemptActive) return;
+    _attemptActive = false;
+    _purchaseEpoch++;
+    _purchaseTimer?.cancel();
+    _purchaseTimer = null;
+    if (!_isPurchasing) return;
+    _isPurchasing = false;
+    notifyListeners();
+  }
+
+  void _onBillingError() {
+    if (!_attemptActive) return;
+    _attemptActive = false;
+    _purchaseEpoch++;
+    _purchaseTimer?.cancel();
+    _purchaseTimer = null;
+    _isPurchasing = false;
+    _lastMessage = 'purchaseFailed';
+    notifyListeners();
+  }
+
+  void _onBillingCanceled() {
+    if (!_attemptActive) return;
+    _attemptActive = false;
+    _purchaseEpoch++;
+    _purchaseTimer?.cancel();
+    _purchaseTimer = null;
+    _isPurchasing = false;
+    notifyListeners();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycle = state;
+    if (state == AppLifecycleState.resumed && _isPurchasing) {
+      _armPurchaseTimer(const Duration(milliseconds: 600));
     }
-    return ok;
   }
 
   Future<void> _handlePurchase(PurchaseDetails purchase) async {
-    final purchaseId = purchase.purchaseID ?? '${purchase.productID}_${purchase.transactionDate}';
+    _attemptActive = false;
+    _purchaseEpoch++;
+    _purchaseTimer?.cancel();
+    _purchaseTimer = null;
+
+    final purchaseId = purchase.purchaseID ??
+        '${purchase.productID}_${purchase.transactionDate}';
     if (_processedPurchaseIds.contains(purchaseId)) {
       _isPurchasing = false;
       notifyListeners();
@@ -274,18 +368,21 @@ class ShopProvider extends ChangeNotifier {
         final isHotDeal = packIndex == weeklyHotDealPackIndex;
         var bonus = 0;
         if (_firstPurchaseBonusAvailable) {
-          bonus += IapConstants.bonusCoinsForPack(packIndex, isFirstPurchase: true, isHotDeal: false);
+          bonus += IapConstants.bonusCoinsForPack(packIndex,
+              isFirstPurchase: true, isHotDeal: false);
           _firstPurchaseBonusAvailable = false;
           await StorageService.instance.saveBool(_firstPurchaseBonusKey, true);
         }
         if (isHotDeal) {
-          bonus += IapConstants.bonusCoinsForPack(packIndex, isFirstPurchase: false, isHotDeal: true);
+          bonus += IapConstants.bonusCoinsForPack(packIndex,
+              isFirstPurchase: false, isHotDeal: true);
         }
         final total = base + bonus;
         _coins += total;
         _processedPurchaseIds.add(purchaseId);
         _lastMessage = bonus > 0 ? 'coinsAddedWithBonus' : 'coinsAdded';
-        _emitCoinEarned(total, bonus > 0 ? 'coinsAddedWithBonus' : 'coinsAdded');
+        _emitCoinEarned(
+            total, bonus > 0 ? 'coinsAddedWithBonus' : 'coinsAdded');
       }
     }
 
@@ -313,13 +410,15 @@ class ShopProvider extends ChangeNotifier {
   }
 
   Future<void> _updateLoginStreak(String today) async {
-    final lastStreak = await StorageService.instance.getString(_lastStreakDateKey);
+    final lastStreak =
+        await StorageService.instance.getString(_lastStreakDateKey);
     if (lastStreak == today) return;
 
     if (lastStreak != null) {
       final parts = lastStreak.split('-');
       if (parts.length == 3) {
-        final lastDate = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+        final lastDate = DateTime(
+            int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
         final todayDate = DateTime.now();
         final diff = todayDate.difference(lastDate).inDays;
         if (diff == 1) {
@@ -350,7 +449,8 @@ class ShopProvider extends ChangeNotifier {
 
     final prize = _pickSpinPrize();
     _coins += prize;
-    await StorageService.instance.saveString(_lastSpinKey, _dateKey(DateTime.now()));
+    await StorageService.instance
+        .saveString(_lastSpinKey, _dateKey(DateTime.now()));
     _lastMessage = 'spinRewardEarned';
     _emitCoinEarned(prize, 'spinRewardEarned');
     await _saveLocal();
@@ -359,7 +459,8 @@ class ShopProvider extends ChangeNotifier {
   }
 
   int _pickSpinPrize() {
-    final totalWeight = IapConstants.spinPrizes.fold<int>(0, (s, e) => s + e.$2);
+    final totalWeight =
+        IapConstants.spinPrizes.fold<int>(0, (s, e) => s + e.$2);
     var roll = _random.nextInt(totalWeight);
     for (final (coins, weight) in IapConstants.spinPrizes) {
       roll -= weight;
@@ -369,9 +470,10 @@ class ShopProvider extends ChangeNotifier {
   }
 
   int effectiveCoinsForPackIndex(int packIndex) {
-    final base = packIndex >= 0 && packIndex < IapConstants.coinPackAmounts.length
-        ? IapConstants.coinPackAmounts[packIndex]
-        : 0;
+    final base =
+        packIndex >= 0 && packIndex < IapConstants.coinPackAmounts.length
+            ? IapConstants.coinPackAmounts[packIndex]
+            : 0;
     return base +
         IapConstants.bonusCoinsForPack(
           packIndex,
@@ -437,28 +539,35 @@ class ShopProvider extends ChangeNotifier {
   }
 
   Future<void> selectTheme(String themeId) async {
-    if (themeId != ShopCatalog.defaultThemeId && !_ownedItems.contains(themeId)) return;
+    if (themeId != ShopCatalog.defaultThemeId && !_ownedItems.contains(themeId)) {
+      return;
+    }
     _activeThemeId = themeId;
     await _saveLocal();
     notifyListeners();
   }
 
   Future<void> selectBackground(String bgId) async {
-    if (bgId != ShopCatalog.defaultBackgroundId && !_ownedItems.contains(bgId)) return;
+    if (bgId != ShopCatalog.defaultBackgroundId && !_ownedItems.contains(bgId)) {
+      return;
+    }
     _activeBackgroundId = bgId;
     await _saveLocal();
     notifyListeners();
   }
 
   Future<void> selectSkin(String skinId) async {
-    if (skinId != ShopCatalog.defaultSkinId && !_ownedItems.contains(skinId)) return;
+    if (skinId != ShopCatalog.defaultSkinId && !_ownedItems.contains(skinId)) {
+      return;
+    }
     _activeSkinId = skinId;
     await _saveLocal();
     notifyListeners();
   }
 
   Future<void> resetThemeToDefault() => selectTheme(ShopCatalog.defaultThemeId);
-  Future<void> resetBackgroundToDefault() => selectBackground(ShopCatalog.defaultBackgroundId);
+  Future<void> resetBackgroundToDefault() =>
+      selectBackground(ShopCatalog.defaultBackgroundId);
   Future<void> resetSkinToDefault() => selectSkin(ShopCatalog.defaultSkinId);
 
   void clearLastMessage() => _lastMessage = null;
@@ -473,6 +582,8 @@ class ShopProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _purchaseTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _billing.dispose();
     super.dispose();
   }

@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -68,14 +67,14 @@ class _PhotoPickerSectionState extends State<PhotoPickerSection> {
 
     setState(() => _busy = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-        withData: true,
+      final file = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1920,
       );
-      if (result == null || result.files.isEmpty) return;
+      if (file == null) return;
 
-      final saved = await PhotoService.instance.persistPlatformFile(result.files.first);
+      final saved = await PhotoService.instance.persistXFile(file);
       if (!mounted) return;
       if (saved == null) {
         _showPhotoError();
@@ -142,16 +141,16 @@ class _PhotoPickerSectionState extends State<PhotoPickerSection> {
 
     setState(() => _busy = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: true,
-        withData: true,
+      final files = await _picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: 1920,
+        limit: pickCount,
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
       final saved = <String>[];
-      for (final f in result.files.take(pickCount)) {
-        final path = await PhotoService.instance.persistPlatformFile(f);
+      for (final f in files.take(pickCount)) {
+        final path = await PhotoService.instance.persistXFile(f);
         if (path != null) saved.add(path);
       }
       if (!mounted) return;

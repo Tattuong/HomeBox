@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_strings.dart';
+import '../widgets/ad_banner_slot.dart';
 import '../widgets/app_ui.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
@@ -34,9 +35,15 @@ class _MainShellState extends State<MainShell> {
             const ProfileScreen(),
           ],
         ),
-        bottomNavigationBar: _BottomNav(
-          index: _index,
-          onChanged: (i) => setState(() => _index = i),
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const AdBannerSlot(),
+            _BottomNav(
+              index: _index,
+              onChanged: (i) => setState(() => _index = i),
+            ),
+          ],
         ),
       ),
     );

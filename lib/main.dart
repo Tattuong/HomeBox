@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:provider/provider.dart';
 
+import 'core/constants/ad_constants.dart';
 import 'core/navigation/app_navigator.dart';
+import 'core/services/ad_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/storage_service.dart';
 import 'providers/home_provider.dart';
@@ -18,8 +24,16 @@ late final ThemeProvider appThemeProvider;
 late final LocaleProvider appLocaleProvider;
 late final HomeProvider appHomeProvider;
 
+void _useSystemPhotoPicker() {
+  final imagePicker = ImagePickerPlatform.instance;
+  if (imagePicker is ImagePickerAndroid) {
+    imagePicker.useAndroidPhotoPicker = true;
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _useSystemPhotoPicker();
   await GoogleFonts.pendingFonts([GoogleFonts.inter()]);
   await StorageService.instance.init();
   await NotificationService.instance.init();
@@ -33,6 +47,9 @@ Future<void> main() async {
   appHomeProvider = HomeProvider();
 
   runApp(const HomeBoxApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (AdConstants.isConfigured) unawaited(AdService.init());
+  });
 }
 
 class HomeBoxApp extends StatelessWidget {
@@ -58,9 +75,12 @@ class HomeBoxApp extends StatelessWidget {
 
               SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
                 statusBarColor: Colors.transparent,
-                statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-                systemNavigationBarColor: isDark ? preset.darkBackground : preset.background,
-                systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                statusBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
+                systemNavigationBarColor:
+                    isDark ? preset.darkBackground : preset.background,
+                systemNavigationBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
               ));
 
               return MaterialApp(
@@ -71,8 +91,10 @@ class HomeBoxApp extends StatelessWidget {
                 darkTheme: preset.darkTheme(),
                 themeMode: theme.themeMode,
                 locale: locale.locale,
-                localeResolutionCallback: (_, supportedLocales) => supportedLocales.first,
-                builder: (context, child) => CoinRewardListener(child: child ?? const SizedBox.shrink()),
+                localeResolutionCallback: (_, supportedLocales) =>
+                    supportedLocales.first,
+                builder: (context, child) =>
+                    CoinRewardListener(child: child ?? const SizedBox.shrink()),
                 localizationsDelegates: const [
                   GlobalMaterialLocalizations.delegate,
                   GlobalWidgetsLocalizations.delegate,
